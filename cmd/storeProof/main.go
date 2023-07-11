@@ -12,10 +12,19 @@ import (
 	"github.com/web3-storage/go-w3s-client"
 )
 
+var (
+	filename = "proof.json"
+)
+
+func init() {
+	flag.StringVar(&filename, "filename", filename, "path of the file to upload")
+}
+
 func main() {
 	log.SetFlags(0)
-	log.SetPrefix("proofup: ")
+	log.SetPrefix("storeProof: ")
 	log.SetOutput(os.Stderr)
+	flag.Usage = usage
 	flag.Parse()
 
 	c, err := w3s.NewClient(w3s.WithToken(mustTokenFromEnv()))
@@ -28,7 +37,7 @@ func main() {
 }
 
 func putSingleFile(c w3s.Client) cid.Cid {
-	file, err := os.Open("proof.json")
+	file, err := os.Open(filename)
 	if err != nil {
 		panic(err)
 	}
@@ -48,17 +57,19 @@ func putFile(c w3s.Client, f fs.File, opts ...w3s.PutOption) cid.Cid {
 func mustTokenFromEnv() string {
 	value := os.Getenv("W3FS_API_KEY")
 	if value == "" {
-		log.Fatal("w3supload")
+		log.Fatal("the environment variable W3FS_API_KEY must be set")
 	}
 
 	return value
 }
 
 func usage() {
-	usageString := `Usage: proofup
+	usageString := `Usage: storeProof
 Upload proof.json to IPFS and print the file's CID.
 
-This utility read a https://web3.storage./ token from the
+This utility read the authentication token from
+the W3FS_API_KEY environment variable.
+See  https://web3.storage.com/ for more information.
 `
 	_, _ = fmt.Fprintln(os.Stderr, usageString)
 
