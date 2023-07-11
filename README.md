@@ -4,7 +4,7 @@ General Purpose Tools
 ## Install
 
 ```bash
-$ go install github.com/jurteam/tools/...
+$ go install github.com/jurteam/tools/...@latest
 ```
 
 ## storeProof
