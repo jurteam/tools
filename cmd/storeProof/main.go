@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/fs"
+	"io/ioutil"
 	"log"
 	"os"
 
@@ -13,11 +15,19 @@ import (
 )
 
 var (
-	filename = "proof.json"
+	filename       = "proof.json"
+	skipValidation bool
 )
 
+type Proof struct {
+	StateRoot    string
+	Revision     int
+	AccountProof []string
+}
+
 func init() {
-	flag.StringVar(&filename, "filename", filename, "path of the file to upload")
+	flag.StringVar(&filename, "proof", filename, "path of the proof file to upload")
+	flag.BoolVar(&skipValidation, "force", skipValidation, "skip proof file validation")
 }
 
 func main() {
@@ -32,14 +42,36 @@ func main() {
 		panic(err)
 	}
 
+	if !skipValidation {
+		validate()
+	}
+
 	cid := putSingleFile(c)
 	fmt.Println(cid)
+}
+
+func validate() {
+	var proof Proof
+
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err := json.Unmarshal(data, &proof); err != nil {
+		log.Fatal(err)
+	}
+
+	if proof.StateRoot == "" || proof.Revision == 0 || len(proof.AccountProof) != 8 {
+		log.Println("validation failed")
+		os.Exit(99)
+	}
 }
 
 func putSingleFile(c w3s.Client) cid.Cid {
 	file, err := os.Open(filename)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	return putFile(c, file)
@@ -50,7 +82,7 @@ func putFile(c w3s.Client, f fs.File, opts ...w3s.PutOption) cid.Cid {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("https://%v.ipfs.dweb.link\n", cid)
+	//fmt.Printf("https://%v.ipfs.dweb.link\n", cid)
 	return cid
 }
 
