@@ -1,16 +1,17 @@
 package main
 
 import (
+	"encoding/csv"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"os"
+	"strconv"
 
 	gsrpc "github.com/centrifuge/go-substrate-rpc-client/v4"
 	"github.com/centrifuge/go-substrate-rpc-client/v4/config"
 	"github.com/centrifuge/go-substrate-rpc-client/v4/types"
-	"github.com/jurteam/tools/internal/csv"
 )
 
 var (
@@ -63,6 +64,7 @@ func main() {
 
 	defer fp.Close()
 	reader := csv.NewReader(fp)
+	reader.FieldsPerRecord = 2
 
 	cfg := config.Default()
 	cfg.RPCURL = ENDPOINTS[flagEndpoint]
@@ -72,30 +74,43 @@ func main() {
 		log.Fatal(err)
 	}
 
-	senderAddr, err := reader.Sender()
+	firstLine, err := reader.Read()
 	if err != nil {
 		log.Fatal(err)
 	}
-	debug("senderAddress:", senderAddr)
 
+	debug("senderAddress:", firstLine[0])
+
+	senderAddr := mustParseAddr(firstLine[0])
 	calls := make([]types.Call, 0)
-	for !reader.EOF() {
-		record, err := reader.Read()
-		if err != nil && err == io.EOF {
-			log.Println("EOF")
-			break
-		}
 
-		if err != nil {
-			log.Printf("Record: error encountered while parsing the CSV file: %v", err)
+	var numErrors int // malformed lines
+
+	for i := 1; ; i++ {
+		r, err := reader.Read()
+		if err != nil && err == io.EOF {
+			debug("EOF")
+			break
+		} else if err != nil {
+			log.Printf("error encountered while parsing line %d: %v", i, err)
+			numErrors += 1
 			continue
 		}
 
-		debug("recipient:", record.Address(), "amount:", record.Amount())
+		debug("recipient:", r[0], "amount:", r[1])
 
-		c, err := types.NewCall(meta, "Balances.transfer", record.Address(), types.NewUCompactFromUInt(record.Amount()))
+		addr, err1 := parseAddr(r[0])
+		amt, err2 := parseAmount(r[1])
+
+		if err1 != nil || err2 != nil {
+			log.Printf("%d: parseAddr error: %v, parseAmount error: %v", i, err1, err2)
+			numErrors += 1
+			continue
+		}
+
+		c, err := types.NewCall(meta, "Balances.transfer", addr, types.NewUCompactFromUInt(amt))
 		if err != nil {
-			log.Printf("error in creating a new call: %v", err)
+			log.Printf("%d: error in creating a new call: %v", i, err)
 			continue
 		}
 
@@ -168,6 +183,19 @@ func setupConnection(cfg *config.Config) (*gsrpc.SubstrateAPI, *types.Metadata, 
 	}
 
 	return api, meta, nil
+}
+
+func parseAddr(s string) (types.Address, error) { return types.NewAddressFromAccountID([]byte(s)) }
+
+func parseAmount(s string) (uint64, error) { return strconv.ParseUint(s, 10, 64) }
+
+func mustParseAddr(s string) types.Address {
+	addr, err := parseAddr(s)
+	if err != nil {
+		log.Fatalf("parseAddr: %v", err)
+	}
+
+	return addr
 }
 
 func debug(v ...any) {

@@ -1,165 +1,203 @@
 package csv
 
-import (
-	"bytes"
-	"encoding/csv"
-	"errors"
-	"fmt"
-	"io"
-	"strconv"
+// import (
+// 	"bytes"
+// 	"encoding/csv"
+// 	"errors"
+// 	"fmt"
+// 	"io"
+// 	"strconv"
 
-	"github.com/centrifuge/go-substrate-rpc-client/v4/types"
-)
+// 	"github.com/centrifuge/go-substrate-rpc-client/v4/types"
+// )
 
-const (
-	NumFields = 2
+// const (
+// 	NumFields = 2
 
-// SenderFollowedByBlankLine = true
-)
+// // SenderFollowedByBlankLine = true
+// )
 
-type Record interface {
-	Address() types.Address
-	Amount() uint64
-	ZeroAmount() bool
-}
+// type Record interface {
+// 	Address() types.Address
+// 	Amount() uint64
+// 	ZeroAmount() bool
+// 	Values() []string
+// }
 
-type rawRecord struct {
-	addr types.Address
-	amt  uint64
-}
+// type feed struct {
+// 	csvReader     *csv.Reader
+// 	chewed        int
+// 	numFields     int
+// 	eof           bool
+// 	err           error
+// 	senderAddr    types.Address
+// 	senderRawAddr string
+// }
 
-func newRawRecord(s, a string) (*rawRecord, error) {
-	addrT, err := parseAddr(s)
-	if err != nil {
-		return nil, err
-	}
+// func newFeed(r io.Reader, fields int) *feed {
+// 	return &feed{csvReader: csv.NewReader(r), numFields: fields}
+// }
 
-	amt, err := strconv.ParseUint(a, 10, 64)
-	if err != nil {
-		return nil, err
-	}
+// // New returns a batch parser that reads records from a io.Reader.
+// func NewScanner(r io.Reader) Scanner { return newFeed(r, NumFields) }
 
-	return &rawRecord{addr: addrT, amt: amt}, nil
-}
+// // SetInpput sets the the parser's input feed to a io.Reader instance.
+// func (f *feed) Init() {
+// 	f.csvReader = csv.NewReader(r)
+// }
 
-func (r *rawRecord) Address() types.Address { return r.addr }
-func (r *rawRecord) Amount() uint64         { return r.amt }
-func (r *rawRecord) ZeroAmount() bool       { return r.amt == 0 }
+// func (f *feed)
 
-type feed struct {
-	csvReader  *csv.Reader
-	chewed     int
-	numFields  int
-	eof        bool
-	err        error
-	senderAddr types.Address
-}
+// // Sender returns the sender address. It retrns an error if called
+// func (f *feed) Sender() types.Address() {
+// 	if f.senderRawAddr != "" {
+// 		return f.senderAddr
+// 	}
 
-func newFeed(r io.Reader, fields int) *feed {
-	return &feed{csvReader: csv.NewReader(r), numFields: fields}
-}
+// 	record, err := f.csvReader.Read()
+// 	if err != nil {
+// 		f.err = err
+// 		return "", err
+// 	}
 
-// Default returns a batch parser initialized with configuration's values.
-func Default() Reader { return New(emptyBuffer(), NumFields) }
+// 	f.chewed += 1
 
-// SetInpput sets the the parser's input feed to a io.Reader instance.
-func (f *feed) SetInput(r io.Reader) { f.csvReader = csv.NewReader(r) }
+// 	f.senderRawAddr = record[0]
 
-// New returns a batch parser that reads records from a io.Reader.
-func New(r io.Reader, n int) Reader { return newFeed(r, n) }
+// 	return record[0], nil
+// }
 
-// SetNumFields
-func (f *feed) SetNumFields(n int) {
-	f.numFields = n
-}
+// type Reader interface {
+// 	Reset()
+// 	Read() (Record, error)
+// 	SetInput(r io.Reader)
+// 	SetNumFields(n int)
+// 	EOF() bool
+// 	Sender() (string, error)
+// }
 
-func (f *feed) Reset() {
-	f.csvReader = csv.NewReader(emptyBuffer())
-	f.chewed = 0
-	f.numFields = NumFields
-	f.eof = false
-}
+// type Scanner interface {
+// 	Sender() types.Address
+// 	Record() Record
+// 	Err() error
+// }
 
-func (f *feed) EOF() bool { return f.eof }
+// func NewReader(r io.Reader) Scanner {
+// 	csvReader := csv.NewReader(r)
+// 	return &feed{csvReader: csvReader, numFields: 2}
+// }
 
-func (f *feed) Sender() (string, error) {
-	if f.EOF() {
-		return "", f.err
-	}
+// // Read reads and parses the next record.
+// func (f *feed) Scan() bool {
+// 	rec, err := f.readRaw()
+// 	if err != nil {
+// 		return nil, fmt.Errorf("Read: %v", err)
+// 	}
 
-	if f.chewed > 0 {
-		return "", fmt.Errorf("sender line was already read")
-	}
+// 	err = rec.parse()
 
-	record, err := f.csvReader.Read()
-	if err != nil {
-		f.eof = err == io.EOF
-		f.err = err
-		return "", err
-	}
+// 	if err != nil {
+// 		err = fmt.Errorf("Read: %v", err)
+// 	}
 
-	f.chewed += 1
+// 	return rec, err
+// }
 
-	return record[0], nil
-}
+// // Read reads and parses the next record.
+// func (f *feed) Read() (Record, error) {
+// 	rec, err := f.readRaw()
+// 	if err != nil {
+// 		return nil, fmt.Errorf("Read: %v", err)
+// 	}
 
-type Reader interface {
-	Reset()
-	Read() (Record, error)
-	SetInput(r io.Reader)
-	SetNumFields(n int)
-	EOF() bool
-	Sender() (string, error)
-}
+// 	err = rec.parse()
 
-func NewReader(r io.Reader) Reader {
-	csvReader := csv.NewReader(r)
-	return &feed{csvReader: csvReader, numFields: 2}
-}
+// 	if err != nil {
+// 		err = fmt.Errorf("Read: %v", err)
+// 	}
 
-// Record reads the next record.
-func (f *feed) Read() (Record, error) {
-	if f.chewed == 0 {
-		return nil, fmt.Errorf("read the sender address first")
-	}
+// 	return rec, err
+// }
 
-	if f.EOF() {
-		return nil, io.EOF
-	}
+// func (f *feed) readRaw() (*rawRecord, error) {
+// 	if f.chewed == 0 {
+// 		return nil, fmt.Errorf("read the sender address first")
+// 	}
 
-	line, err := f.csvReader.Read()
-	if err != nil {
-		f.err = err
+// 	if f.EOF() {
+// 		return nil, io.EOF
+// 	}
 
-		if err != io.EOF {
-			f.chewed += 1
-		}
+// 	line, err := f.csvReader.Read()
+// 	if err != nil {
+// 		f.err = err
 
-		return nil, f.err
-	}
+// 		if err != io.EOF {
+// 			f.chewed += 1
+// 		}
 
-	return newRawRecord(line[0], line[1])
-}
+// 		return nil, f.err
+// 	}
 
-// Records returns the number of the records read.
-func (f *feed) Records() int { return f.chewed }
+// 	return newRecord(line), nil
+// }
 
-func emptyBuffer() *bytes.Buffer { return bytes.NewBuffer(make([]byte, 0)) }
+// // Records returns the number of the records read.
+// func (f *feed) Records() int { return f.chewed }
 
-func parseSenderRecord(record []string) (types.Address, error) {
-	var v string
+// func emptyBuffer() *bytes.Buffer { return bytes.NewBuffer(make([]byte, 0)) }
 
-	for _, v = range record {
-		if v != "" {
-			return parseAddr(v)
-		}
-	}
+// func parseSenderRecord(r []string) (types.Address, error) {
+// 	var v string
 
-	return types.Address{}, ErrEmptySenderLine
-}
+// 	for _, v = range r {
+// 		if v != "" {
+// 			return parseAddr(v)
+// 		}
+// 	}
 
-func parseAddr(s string) (types.Address, error) { return types.NewAddressFromAccountID([]byte(s)) }
+// 	return types.Address{}, ErrEmptySenderLine
+// }
 
-var (
-	ErrEmptySenderLine = errors.New("csv: couldn't find a valid sender address as the line is empty")
-)
+// func parseAddr(s string) (types.Address, error) { return types.NewAddressFromAccountID([]byte(s)) }
+
+// var (
+// 	ErrEmptySenderLine = errors.New("csv: couldn't find a valid sender address as the line is empty")
+// )
+
+// type rawRecord struct {
+// 	vals []string
+// 	addr types.Address
+// 	amt  uint64
+// }
+
+// func newRecord(vals []string) *rawRecord {
+// 	return &rawRecord{vals: vals}
+// }
+
+// func (r *rawRecord) parse() error {
+// 	if len(r.vals) < 2 {
+// 		return errors.New("insufficient number of fields")
+// 	}
+
+// 	addrT, err := parseAddr(r.vals[0])
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	r.addr = addrT
+
+// 	amt, err := strconv.ParseUint(r.vals[1], 10, 64)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	r.amt = amt
+
+// 	return nil
+// }
+
+// func (r *rawRecord) Address() types.Address { return r.addr }
+// func (r *rawRecord) Amount() uint64         { return r.amt }
+// func (r *rawRecord) ZeroAmount() bool       { return r.amt == 0 }
+// func (r *rawRecord) Values() []string       { return r.vals }
