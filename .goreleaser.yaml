@@ -1,0 +1,43 @@
+project_name: jurtools
+before:
+  hooks:
+  - make distclean
+  - go mod verify
+  - go mod tidy
+  - go generate ./...
+
+gomod:
+  proxy: true
+  env:
+    - GOPROXY=https://proxy.golang.org,direct
+    - GOSUMDB=sum.golang.org
+  mod: readonly
+
+builds:
+  - main: ./cmd/batchxfer
+    id: "batchxfer"
+    binary: batchxfer
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - openbsd
+      - freebsd
+
+archives:
+  - format: tar.gz
+    wrap_in_directory: true
+    format_overrides:
+    - goos: windows
+      format: zip
+checksum:
+  name_template: 'checksums.txt'
+snapshot:
+  name_template: "{{ incpatch .Version }}-UNRELEASED"
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'

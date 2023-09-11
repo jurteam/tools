@@ -22,3 +22,4 @@ go.work
 
 .env
 proof.json
+.DS_Store
