@@ -10,7 +10,7 @@ import (
 	gsrpc "github.com/centrifuge/go-substrate-rpc-client/v4"
 	"github.com/centrifuge/go-substrate-rpc-client/v4/config"
 	"github.com/centrifuge/go-substrate-rpc-client/v4/types"
-	"github.com/jurteam/tools/internal/csvparser"
+	"github.com/jurteam/tools/internal/csv"
 )
 
 var (
@@ -62,7 +62,7 @@ func main() {
 	}
 
 	defer fp.Close()
-	reader := csvparser.NewReader(fp)
+	reader := csv.NewReader(fp)
 
 	cfg := config.Default()
 	cfg.RPCURL = ENDPOINTS[flagEndpoint]

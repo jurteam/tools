@@ -1,4 +1,4 @@
-package csvparser
+package csv
 
 import (
 	"bytes"
