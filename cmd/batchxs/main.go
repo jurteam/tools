@@ -81,7 +81,7 @@ func main() {
 
 	debug("senderAddress:", firstLine[0])
 
-	senderAddr := mustParseAddr(firstLine[0])
+	_ = mustParseAddr(firstLine[0])
 	calls := make([]types.Call, 0)
 
 	var numErrors int // malformed lines
@@ -111,6 +111,7 @@ func main() {
 		c, err := types.NewCall(meta, "Balances.transfer", addr, types.NewUCompactFromUInt(amt))
 		if err != nil {
 			log.Printf("%d: error in creating a new call: %v", i, err)
+			numErrors += 1
 			continue
 		}
 
