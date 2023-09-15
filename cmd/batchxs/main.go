@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/csv"
+
+	//	"encoding/csv"
 	"flag"
 	"fmt"
 	"io"
@@ -15,27 +17,65 @@ import (
 )
 
 var (
-	flagEndpoint string
-	flagDebug    bool
-	flagFilename string
+	flagEndpoint   string
+	flagDebug      bool
+	flagFilename   string
+	flagSimulate   bool
+	flagSkipErrors bool
+
+	debugLogger *log.Logger
+	rpcAddr     string
+	signOpts    types.SignatureOptions
+	inFile      io.ReadCloser
 )
 
-var ENDPOINTS = map[string]string{
-	"simplystaking": "wss://jur-archive-mainnet-1.simplystaking.xyz/VX68C07AR4K2/ws",
-	"iceberg":       "wss://jur-mainnet-archive-rpc-1.icebergnodes.io",
-}
-
-var (
-	debugLogger *log.Logger
-	signOpts    types.SignatureOptions
+const (
+	rpcSimplyStaking string = "wss://jur-archive-mainnet-1.simplystaking.xyz/VX68C07AR4K2/ws"
+	rpcIceberg       string = "wss://jur-mainnet-archive-rpc-1.icebergnodes.io"
+	rpcLocal         string = "wss://localhost"
 )
 
 func init() {
-	flag.StringVar(&flagEndpoint, "endpoint", "simplystaking", "RPC endpoint, choices: 'simplystaking', 'iceberg'")
-	flag.StringVar(&flagFilename, "filename", "batch.csv", "batch transaction filename")
-	flag.BoolVar(&flagDebug, "debug", true, "debug mode")
+	flag.StringVar(&flagEndpoint, "endpoint", "localhost",
+		"RPC endpoint, choices: 'simplystaking', 'iceberg'")
+	flag.StringVar(&flagFilename, "filename", "-", "Batch transaction filename")
+	flag.BoolVar(&flagSimulate, "s", false, "Simulate operations with actually executing them.")
+	flag.BoolVar(&flagDebug, "D", true,
+		"Run in simulate mode (it implies the -s flag) and print additional debug informaton to stderr. "+
+			"Export the malformed records to a rejected_TIMESTAMP.csv file.")
+	flag.BoolVar(&flagSkipErrors, "f", false,
+		"Create and execut a batch of the valid records found in the input file. "+
+			"Export malformed records to skipped_TIMESTAMP.csv")
 
 	debugLogger = log.New(&dummyWriter{}, "", 0)
+}
+
+func handleFlags() {
+	flagDebug = flagSimulate || flagDebug
+
+	switch flagEndpoint {
+	case "simply":
+		rpcAddr = rpcSimplyStaking
+	case "iceberg":
+		rpcAddr = rpcIceberg
+	case "local", "localhost":
+		rpcAddr = "ws://127.0.0.1:9944/"
+	default:
+		log.Fatalf("invalid endooint: %q", flagEndpoint)
+	}
+}
+
+func openInputFile() io.ReadCloser {
+	if flagFilename == "-" {
+		return os.Stdin
+	}
+
+	infile, err := os.Open(flagFilename)
+	if err != nil {
+		log.Fatalf("openInputFile: %v", err)
+	}
+
+	return infile
 }
 
 func main() {
@@ -50,24 +90,14 @@ func main() {
 		debugLogger.SetPrefix("DEBUG: ")
 	}
 
-	fp, err := os.Open(flagFilename)
-	if err != nil {
-		switch {
-		case os.IsNotExist(err):
-			log.Fatalf("couildn't find %s: %v", flagFilename, err)
-		case os.IsPermission(err):
-			log.Fatalf("couildn't open %s: %v", flagFilename, err)
-		default:
-			log.Fatalf("an error occurred: %v", err)
-		}
-	}
+	infile := openInputFile()
+	defer infile.Close()
 
-	defer fp.Close()
-	reader := csv.NewReader(fp)
+	reader := csv.NewReader(infile)
 	reader.FieldsPerRecord = 2
 
 	cfg := config.Default()
-	cfg.RPCURL = ENDPOINTS[flagEndpoint]
+	cfg.RPCURL = rpcAddr
 
 	_, meta, err := setupConnection(&cfg)
 	if err != nil {
@@ -126,6 +156,8 @@ func main() {
 
 	ext := types.NewExtrinsic(batchCall)
 	fmt.Printf("%v", ext)
+
+	// TODO: execute the extrinsic
 }
 
 func setupConnection(cfg *config.Config) (*gsrpc.SubstrateAPI, *types.Metadata, error) {
