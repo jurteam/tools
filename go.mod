@@ -6,7 +6,7 @@ require (
 	github.com/go-git/go-git/v5 v5.9.0
 	github.com/ipfs/go-cid v0.4.1
 	github.com/web3-storage/go-w3s-client v0.0.7
-	golang.org/x/mod v0.12.0
+	golang.org/x/mod v0.14.0
 )
 
 require (
